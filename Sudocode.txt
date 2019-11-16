@@ -1,0 +1,138 @@
+Deduper Analysis and Sudocode
+
+
+The Problem:
+PCR duplicates in RNA-seq SAM output. After RNA-seq we are typically interested
+in the number of times a transcript aligns with a reference at a particular
+location, however because amplification of transcripts is required to provide
+sufficient signal for sequencing thereare a number of records in our sam files
+belonging to non-unique molecules that reflect the number of times a unique
+transcript was amplified. These are called PCR duplicates. What we really want
+is the number of unique initially existing molecules being expressed in the
+sample prior to amplification.
+
+The good news is we can recognize PCR duplicates using a set of criteria and
+remove records in our sam file pertaining to these duplicates so that we
+are left with the theoretical number of these true biologically existing
+transcripts to output to a new "deduped" sam file. The new sam will be able to
+provide true expression counts for each feature without the replication and
+noise of PCR amplification.
+
+To be a duplicate sequence a transcript must:
+1. Be mapped. Checked via bitflag.
+2. Have the same unique molecular identifier(umi)
+3. Same alignment postion adjusted by CIGAR string.
+4. Chromosome.
+5. Align to the same strand.
+
+
+High Level Functions---
+
+mapped(bitflag):
+```
+Check 0x4 of the bitflag to tell if the read was mapped
+Rewrite to take bitflag as param, but make save line split for final loop
+```
+if ((bitflag & 4) != 4):
+	if ((flag & 256) != 256):
+		#mapped_true
+        Return True
+else:
+	#mapped_false
+    Return False
+
+
+
+fwORrv(bitflag):
+```
+Reads bit flag to ask whether the read aligned to the forward or reverse strand.
+```
+if ((bitflag & 16) != 16):
+	#Forward seq aligning
+    Return True
+else:
+	#Reverse seq aligning
+    Return False
+
+
+CIGAR&Position(coords, CIGAR):
+    ```
+    Adjusts position based of whether it is forward or reverse mapping
+    and the records CIGAR string.
+    ```
+    # Associate integers with clipping, indels, and matching with regex magic
+    if fwORrv(bitflag) == True:
+        adj_pos = position - softclipping - Deletions + Insertions
+    else:
+        adj_pos = position + softclipping + Deletions - Insertions
+
+    Return adj_pos
+
+
+Coding Strategy:
+The samfile will be sorted using samtools sort utility to assist in
+record deduplication. This occurs because otherwise we would have to store all
+the non-dup records in memory to make comparisons but with a sorted bam since
+some fields are changing predictably, conditions can be made to clear the set
+because we know we won't see the duplicate later in the file.
+
+
+Argparse will be implemented to specify the input file, output file, and list
+of umi's.
+
+
+A data structure called a set  will be used to contain a condensed record
+containing fields that make it unique, and comparable as to
+whether it is being duplicated. e.g. umi_set = set(arg.umi_file)
+
+
+When the duplicated status of a new record is in question a new condensed record
+will be created for it, which will be queried in the existing set of unique
+records. If the query does not make a hit then the record is unique and it will
+be added to the set, and the record will be written to the new sam file.
+A set will also contain chromosome data for set flushing.
+
+
+Some components of the condensed record required adjustment such as the
+position. If the record aligns to the forward strand it is adjusted for
+soft clipping by subtracting that value from the position. If it aligns to the
+reverse then the M score is added and the soft clipping score is added.
+
+
+SudoCode:
+for line in file_handle:
+# Record components will be extracted using .split and indexing
+    qname = line.split("	")[0]
+    bitflag = line.split("	")[1]
+    Chrom = line.split("	")[2]
+    coords = line.split("   ")[3]
+    CIGAR = line.split("	")[5]
+    adj_pos = CIGAR&Position(coords, CIGAR)
+
+
+    # UMI and strand need to be further processed from qname, & bitflag
+    umi = qname.split(":")[2]
+
+    if fwORrv(bitflag):
+        strand = "fwd"
+    if fwORrv(bitflag):
+        strand = "rv"
+
+    # Chroms will be recorded to flush the set of records upon a new observation
+    Chroms += Chrom
+
+    # Building the condensed record and querying it against previous unique records
+    # If the record is not present it is written to file and added to set
+    if mapped(bitflag) == "True" and umi in umi_set:
+        condensed_rec = umi + Chrom + adj_pos + strand
+        if condensed_rec not in uniq_set:
+            uniq_set += condensed_rec
+            new_sam_file.write(line)
+
+    # Reseting the sets after each chromosome to keep memory reasonable
+    if Chrom not in chrom_set:
+        uniq_set = set()
+        chrom_set = set()
+
+    else:
+        pass
