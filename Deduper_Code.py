@@ -13,7 +13,7 @@ def get_args():
     parser.add_argument("-i", help="Input sam file", required = True)
     parser.add_argument("-j", help="Output sam file", required = True)
     parser.add_argument("-u", help="file with unique molecular identifiers or set to 'random'")
-    parser.add_argument("-s", help="If input sam sorting desired, state 'sort'", required = False)
+#    parser.add_argument("-s", help="If input sam sorting desired, state 'sort'", required = False)
     parser.add_argument("-p", help = "If paired end sequencing data state 'True'", required = False)
     return parser.parse_args()
 
@@ -29,13 +29,13 @@ if args.p == "True":
 #Input sam file
 input = open(args.i, "r")
 
-
+'''
 if args.s == "sort":
-    sam_to_bam = f"samtools view -S -b {input} > temp.bam"
+    sam_to_bam = f"samtools view -S -b {input} ">" temp.bam"
     sort_bam = "samtools sort temp.bam - O sam -o sorted.sam"
     os.system(sam_to_bam)
     os.system(sort_bam)
-
+'''
 #Output sam file
 output = open(args.j, "w")
 
@@ -105,8 +105,8 @@ for line in input:
         if umi in umi_list or args.u == "random" and mapped(bitflag) == True:
 
             #If forward aligning subtract for int softclipped
+            cigar_tups = re.findall(r'([0-9]+)([A-Z]{1})', CIGAR)
             if fwORrv(bitflag):
-                cigar_tups = re.findall(r'([0-9]+)([A-Z]{1})', CIGAR)
                 if "S" in cigar_tups[0][1]:
                     adj_lpos = int(lpos) - int(cigar_tups[0][0])
                 else:
@@ -116,7 +116,7 @@ for line in input:
             if fwORrv(bitflag) == False:
                 adj_lpos = int(lpos)
                 for tup in cigar_tups:
-                    if tup[1] == "M" or "I" or "N":
+                    if tup[1] in ["M", "I", "N", "D"]:
                         adj_lpos += int(tup[0])
 
             #Now create a uniq record and if uniq store it in our set
@@ -128,6 +128,7 @@ for line in input:
                 uniq_recs.add(uniq_rec)
 
 print(uniq_recs)
-
+'''
 os.remove("temp.bam")
 os.remove("sorted.sam")
+'''
